@@ -2,23 +2,18 @@
 #define POISSON_1D_HPP
 
 #include <deal.II/base/quadrature_lib.h>
-
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_tools.h>
-
 #include <deal.II/fe/fe_simplex_p.h>
 #include <deal.II/fe/fe_values.h>
-
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_out.h>
 #include <deal.II/grid/tria.h>
-
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/vector.h>
-
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
@@ -31,40 +26,30 @@ using namespace dealii;
 /**
  * Class managing the differential problem.
  */
-class Poisson1D
-{
-public:
+class Poisson1D {
+ public:
   // Physical dimension (1D, 2D, 3D)
   static constexpr unsigned int dim = 1;
 
   // Constructor.
-  Poisson1D(const unsigned int                              &N_el_,
-            const unsigned int                              &r_,
-            const std::function<double(const Point<dim> &)> &mu_,
-            const std::function<double(const Point<dim> &)> &f_)
-    : N_el(N_el_)
-    , r(r_)
-    , mu(mu_)
-    , f(f_)
-  {}
+  Poisson1D(const unsigned int& N_el_, const unsigned int& r_,
+            const std::function<double(const Point<dim>&)>& mu_,
+            const std::function<double(const Point<dim>&)>& f_)
+      : N_el(N_el_), r(r_), mu(mu_), f(f_) {}
 
   // Initialization.
-  void
-  setup();
+  void setup();
 
   // System assembly.
-  void
-  assemble();
+  void assemble();
 
   // System solution.
-  void
-  solve();
+  void solve();
 
-  // Output.
-  void
-  output() const;
+  // Output (write result to output files)
+  void output() const;
 
-protected:
+ protected:
   // Number of elements.
   const unsigned int N_el;
 
@@ -72,10 +57,27 @@ protected:
   const unsigned int r;
 
   // Diffusion coefficient.
-  std::function<double(const Point<dim> &)> mu;
+  std::function<double(const Point<dim>&)> mu;
 
   // Forcing term.
-  std::function<double(const Point<dim> &)> f;
+  std::function<double(const Point<dim>&)> f;
+
+  // Mesh.
+  Triangulation<dim> mesh;
+
+  // Finite element space.
+  std::unique_pointer<FiniteElement<dim>> fe;
+
+  // Quadrature rule.
+  std::unique_pointer<Quadrature<dim>> quadrature;
+
+  DoFHandler<dim> dof_handler;
+
+  SparsityPattern sparsity_pattern;
+  SparseMatrix<double> system_matrix;
+
+  Vector<double> system_rhs;
+  Vector<double> solution;
 };
 
 #endif
