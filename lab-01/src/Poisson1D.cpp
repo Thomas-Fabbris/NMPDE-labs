@@ -114,17 +114,22 @@ void Poisson1D::assemble() {
       // - the values of shape functions (update_values);
       // - the derivative of shape functions (update_gradients);
       // - the position of quadrature points (update_quadrature_points);
-      // - the quadrature weights (update_JxW_values).
+      // - the quadrature weights (update_JxW_values); they are stored based on
+      // a reference interval and during the computation a change of variables
+      // is performed under the hood to map actual elements to reference
+      // elements.
       update_values | update_gradients | update_quadrature_points |
           update_JxW_values);
 
   // Local matrix and right-hand side vector. We will overwrite them for
-  // each element within the loop.
+  // each element within the loop, but allocate them outside it.
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double> cell_rhs(dofs_per_cell);
 
   // We will use this vector to store the global indices of the DoFs of the
   // current element within the loop.
+  // types::global_dof_index is just an alias for unsigned int data type that is
+  // added as syntactic sugar to the code
   std::vector<types::global_dof_index> dof_indices(dofs_per_cell);
 
   // Reset the global matrix and vector, just in case.
@@ -146,6 +151,9 @@ void Poisson1D::assemble() {
     for (unsigned int q = 0; q < n_q; ++q) {
       // Here we assemble the local contribution for current cell and
       // current quadrature point, filling the local matrix and vector.
+      // Here, mu_loc has a constant value for any point, so we evaluate it once
+      // outside the innermost loops. The same applies to f_loc, whereas the
+      // JxW_values are already cached automatically.
       const double mu_loc = mu(fe_values.quadrature_point(q));
       const double f_loc = f(fe_values.quadrature_point(q));
 
@@ -214,7 +222,7 @@ void Poisson1D::solve() {
   std::cout << "===============================================" << std::endl;
 
   // Here we specify the maximum number of iterations of the iterative solver,
-  // and its absolute and relative tolerances.
+  // and its absolute and relative (reduce in dealii nomenclature) tolerances.
   ReductionControl solver_control(/* maxiter = */ 1000,
                                   /* tolerance = */ 1.0e-16,
                                   /* reduce = */ 1.0e-6);
@@ -224,7 +232,7 @@ void Poisson1D::solve() {
   SolverCG<Vector<double>> solver(solver_control);
 
   std::cout << "  Solving the linear system" << std::endl;
-  // We use the identity preconditioner for now.
+  // We use the identity preconditioner for now (non-preconditioned CG method).
   solver.solve(system_matrix, solution, system_rhs, PreconditionIdentity());
   std::cout << "  " << solver_control.last_step() << " CG iterations"
             << std::endl;
@@ -246,7 +254,8 @@ void Poisson1D::output() const {
   data_out.build_patches();
 
   // Then, use one of the many write_* methods to write the file in an
-  // appropriate format.
+  // appropriate format. dealii supports many file formats, but here we use .vtk
+  // file.
   const std::string output_file_name =
       "output-" + std::to_string(N_el) + ".vtk";
   std::ofstream output_file(output_file_name);
@@ -262,6 +271,9 @@ double Poisson1D::compute_error(const VectorTools::NormType& norm_type,
   // The error is an integral, and we approximate that integral using a
   // quadrature formula. To make sure we are accurate enough, we use a
   // quadrature formula with one node more than what we used in assembly.
+  // Using the same quadrature formula as the one used in the assemble()
+  // function will result in artificially small error norms because of the
+  // successive numerical approximations done.
   const QGauss<dim> quadrature_error = QGauss<dim>(r + 2);
 
   // First we compute the norm on each element, and store it in a vector.

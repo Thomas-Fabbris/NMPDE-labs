@@ -7,18 +7,14 @@
 static constexpr unsigned int dim = Poisson1D::dim;
 
 // Exact solution.
-class ExactSolution : public Function<dim>
-{
-public:
-  // Constructor.
-  ExactSolution()
-  {}
+class ExactSolution : public Function<dim> {
+ public:
+  // Default constructor.
+  ExactSolution() = default;
 
   // Evaluation.
-  virtual double
-  value(const Point<dim> &p,
-        const unsigned int /*component*/ = 0) const override
-  {
+  virtual double value(const Point<dim>& p,
+                       const unsigned int /*component*/ = 0) const override {
     // Points 3 and 4.
     return std::sin(2.0 * M_PI * p[0]);
 
@@ -34,10 +30,9 @@ public:
   // dim-dimensional vector. In our case, dim = 1, so that the Tensor will in
   // practice contain a single number. Nonetheless, we need to return an
   // object of type Tensor.
-  virtual Tensor<1, dim>
-  gradient(const Point<dim> &p,
-           const unsigned int /*component*/ = 0) const override
-  {
+  virtual Tensor<1, dim> gradient(
+      const Point<dim>& p,
+      const unsigned int /*component*/ = 0) const override {
     Tensor<1, dim> result;
 
     // Points 3 and 4.
@@ -56,15 +51,13 @@ public:
 };
 
 // Main function.
-int
-main(int /*argc*/, char * /*argv*/[])
-{
+int main(int /*argc*/, char* /*argv*/[]) {
   ConvergenceTable table;
 
   const std::vector<unsigned int> N_el_values = {10, 20, 40, 80, 160, 320};
-  const unsigned int              degree      = 2;
-  const auto mu = [](const Point<dim> & /*p*/) { return 1.0; };
-  const auto f  = [](const Point<dim> &p) {
+  const unsigned int degree = 2;
+  const auto mu = [](const Point<dim>& /*p*/) { return 1.0; };
+  const auto f = [](const Point<dim>& p) {
     // Points 3 and 4.
     return 4.0 * M_PI * M_PI * std::sin(2.0 * M_PI * p[0]);
 
@@ -80,29 +73,27 @@ main(int /*argc*/, char * /*argv*/[])
   std::ofstream convergence_file("convergence.csv");
   convergence_file << "h,eL2,eH1" << std::endl;
 
+  for (const unsigned int& N_el : N_el_values) {
+    Poisson1D problem(N_el, degree, mu, f);
 
-  for (const unsigned int &N_el : N_el_values)
-    {
-      Poisson1D problem(N_el, degree, mu, f);
+    problem.setup();
+    problem.assemble();
+    problem.solve();
+    problem.output();
 
-      problem.setup();
-      problem.assemble();
-      problem.solve();
-      problem.output();
+    const double h = 1.0 / N_el;
 
-      const double h = 1.0 / N_el;
-
-      const double error_L2 =
+    const double error_L2 =
         problem.compute_error(VectorTools::L2_norm, exact_solution);
-      const double error_H1 =
+    const double error_H1 =
         problem.compute_error(VectorTools::H1_norm, exact_solution);
 
-      table.add_value("h", h);
-      table.add_value("L2", error_L2);
-      table.add_value("H1", error_H1);
+    table.add_value("h", h);
+    table.add_value("L2", error_L2);
+    table.add_value("H1", error_H1);
 
-      convergence_file << h << "," << error_L2 << "," << error_H1 << std::endl;
-    }
+    convergence_file << h << "," << error_L2 << "," << error_H1 << std::endl;
+  }
 
   table.evaluate_all_convergence_rates(ConvergenceTable::reduction_rate_log2);
 

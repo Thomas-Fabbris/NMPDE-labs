@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug active C++ file in Apptainer",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${fileDirname}/${fileBasenameNoExtension}",
+      "args": [
+        "${input:argumentoProgramma}"
+      ],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gcc",
+      "preLaunchTask": "Build C++ file in Apptainer",
+      "pipeTransport": {
+        "pipeCwd": "${workspaceFolder}",
+        "pipeProgram": "/usr/bin/apptainer",
+        "pipeArgs": [
+          "exec",
+          "--bind",
+          "${workspaceFolder}:/src",
+          "${env:HOME}/Desktop/amsc_mk_2025.sif",
+          "gdb",
+          "--interpreter=mi"
+        ],
+        "debuggerPath": "/usr/bin/gcc"
+      }
+    },
+  ],
+  "inputs": [
+    {
+      "id": "argumentoProgramma",
+      "type": "promptString",
+      "description": "Insert command-line arguments",
+      "default": ""
+    }
+  ]
+}
