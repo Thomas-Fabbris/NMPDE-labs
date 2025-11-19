@@ -95,6 +95,7 @@ main(int /*argc*/, char * /*argv*/[])
       const double error_H1 =
         problem.compute_error(VectorTools::H1_norm, exact_solution);
 
+      // Add entries to the convergence table specifying the header.
       table.add_value("h", h);
       table.add_value("L2", error_L2);
       table.add_value("H1", error_H1);

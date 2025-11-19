@@ -1,5 +1,9 @@
 #include "Poisson2D.hpp"
 
+#include <deal.II/grid/grid_in.h>
+
+#include <filesystem>
+
 void
 Poisson2D::setup()
 {
@@ -7,17 +11,14 @@ Poisson2D::setup()
 
   // Create the mesh.
   {
-    std::cout << "Initializing the mesh" << std::endl;
-    GridGenerator::subdivided_hyper_cube(mesh, N_el, 0.0, 1.0, true);
+    GridIn<dim> grid_in;
+    grid_in.attach_triangulation(mesh);
+
+    std::ifstream mesh_file(mesh_file_name);
+    grid_in.read : msh(mesh_file);
+
     std::cout << "  Number of elements = " << mesh.n_active_cells()
               << std::endl;
-
-    // Write the mesh to file.
-    const std::string mesh_file_name = "mesh-" + std::to_string(N_el) + ".vtk";
-    GridOut           grid_out;
-    std::ofstream     grid_out_file(mesh_file_name);
-    grid_out.write_vtk(mesh, grid_out_file);
-    std::cout << "  Mesh saved to " << mesh_file_name << std::endl;
   }
 
   std::cout << "-----------------------------------------------" << std::endl;
@@ -32,7 +33,8 @@ Poisson2D::setup()
     std::cout << "  DoFs per cell              = " << fe->dofs_per_cell
               << std::endl;
 
-    quadrature = std::make_unique<QGaussSimplex<dim>>(r + 1);
+    quadrature          = std::make_unique<QGaussSimplex<dim>>(r + 1);
+    quadrature_boundary = std::make_unique<QGaussSimplex<dim - 1>>(r + 1);
 
     std::cout << "  Quadrature points per cell = " << quadrature->size()
               << std::endl;
@@ -52,7 +54,8 @@ Poisson2D::setup()
 
   std::cout << "-----------------------------------------------" << std::endl;
 
-  // Initialize the linear system.
+  // Initialize the linear system, independently on the source the matrix and
+  // vectors of the system come from.
   {
     std::cout << "Initializing the linear system" << std::endl;
 
@@ -84,17 +87,16 @@ Poisson2D::assemble()
   // Number of quadrature points for each element.
   const unsigned int n_q = quadrature->size();
 
-  FEValues<dim> fe_values(
-    *fe,
-    *quadrature,
-    // Here we specify what quantities we need FEValues to compute on
-    // quadrature points. For our test, we need:
-    // - the values of shape functions (update_values);
-    // - the derivative of shape functions (update_gradients);
-    // - the position of quadrature points (update_quadrature_points);
-    // - the quadrature weights (update_JxW_values).
-    update_values | update_gradients | update_quadrature_points |
-      update_JxW_values);
+  FEValues<dim> fe_values(*fe,
+                          *quadrature,
+                          update_values | update_gradients |
+                            update_quadrature_points | update_JxW_values);
+
+  FEFaceValues<dim> fe_values_boundary(*fe,
+                                       *quadrature_boundary,
+                                       update_values |
+                                         update_quadrature_points |
+                                         update_JxW_values);
 
   // Local matrix and vector.
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
@@ -122,15 +124,43 @@ Poisson2D::assemble()
             {
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
-                  cell_matrix(i, j) += mu_loc *                     //
-                                       fe_values.shape_grad(i, q) * //
-                                       fe_values.shape_grad(j, q) * //
-                                       fe_values.JxW(q);
+                  // * operator is overridden by deal.II in order to implement
+                  // the scalar product, but being explicit is better
+                  cell_matrix(i, j) +=
+                    mu_loc *                                     //
+                    scalar_product(fe_values.shape_grad(i, q),   //
+                                   fe_values.shape_grad(j, q)) * //
+                    fe_values.JxW(q);
                 }
 
               cell_rhs(i) += f_loc *                       //
                              fe_values.shape_value(i, q) * //
                              fe_values.JxW(q);
+            }
+        }
+
+      if (cell->at_boundary())
+        {
+          for (unsigned int f = 0; f < cell->n_faces; ++f)
+            {
+              if (cell->face(f).at_boundary() &&
+                  (cell->face(f)->boundary_id() == 2 ||
+                   cell->face(f)->boundary_id() == 3))
+                {
+                  fe_values_boundary.reinit(cell, f);
+                  for (unsigned int q = 0; q < quadrature_boundary.size(); ++q)
+                    {
+                      const auto h_loc =
+                        h(fe_values_boundary.quadrature_point(q));
+                      for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                        {
+                          cell_rhs(i) +=
+                            h_loc *                                //
+                            fe_values_boundary.shape_value(i, q) * //
+                            fe_values_boundary.JxW(q);
+                        }
+                    }
+                }
             }
         }
 
@@ -143,7 +173,7 @@ Poisson2D::assemble()
   // Dirichlet boundary conditions.
   {
     std::map<types::global_dof_index, double> boundary_values;
-    Functions::ZeroFunction<dim>              bc_function;
+    FunctionG                                 bc_function;
 
     std::map<types::boundary_id, const Function<dim> *> boundary_functions;
     boundary_functions[0] = &bc_function;
@@ -184,33 +214,14 @@ Poisson2D::output() const
 
   data_out.add_data_vector(dof_handler, solution, "solution");
   data_out.build_patches();
-
+  const std::filesystem::path mesh_path(
+    mesh_file_name); // Remove the extesion from the mesh filename
   const std::string output_file_name =
-    "output-" + std::to_string(N_el) + ".vtk";
+    "output-" + mesh_path.stem().string() + ".vtk";
   std::ofstream output_file(output_file_name);
   data_out.write_vtk(output_file);
 
   std::cout << "Output written to " << output_file_name << std::endl;
 
   std::cout << "===============================================" << std::endl;
-}
-
-double
-Poisson2D::compute_error(const VectorTools::NormType &norm_type,
-                         const Function<dim>         &exact_solution) const
-{
-  const QGaussSimplex<dim> quadrature_error(r + 2);
-
-  Vector<double> error_per_cell(mesh.n_active_cells());
-  VectorTools::integrate_difference(dof_handler,
-                                    solution,
-                                    exact_solution,
-                                    error_per_cell,
-                                    quadrature_error,
-                                    norm_type);
-
-  const double error =
-    VectorTools::compute_global_error(mesh, error_per_cell, norm_type);
-
-  return error;
 }

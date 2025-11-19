@@ -35,14 +35,27 @@ class Poisson2D
 {
 public:
   // Physical dimension (1D, 2D, 3D)
-  static constexpr unsigned int dim = 1;
+  static constexpr unsigned int dim = 2;
+
+  class FunctionG : public Function<dim>
+  {
+  public:
+    FunctionG() = default;
+
+    virtual double
+    value(const Point<dim> &p, const unsigned int /*component*/) const override
+    {
+      return p[0] + p[1];
+    }
+  };
 
   // Constructor.
-  Poisson2D(const unsigned int                              &N_el_,
+  Poisson2D(const std::string                               &mesh_file_name_,
             const unsigned int                              &r_,
             const std::function<double(const Point<dim> &)> &mu_,
-            const std::function<double(const Point<dim> &)> &f_)
-    : N_el(N_el_)
+            const std::function<double(const Point<dim> &)> &f_,
+            const std::function<double(const Point<dim> &)> &h_)
+    : mesh_file_name(mesh_file_name_)
     , r(r_)
     , mu(mu_)
     , f(f_)
@@ -64,14 +77,9 @@ public:
   void
   output() const;
 
-  // Compute the error against a given exact solution.
-  double
-  compute_error(const VectorTools::NormType &norm_type,
-                const Function<dim>         &exact_solution) const;
-
 protected:
-  // Number of elements.
-  const unsigned int N_el;
+  // Mesh file name.
+  const std::string mesh_file_name;
 
   // Polynomial degree.
   const unsigned int r;
@@ -81,6 +89,9 @@ protected:
 
   // Forcing term.
   std::function<double(const Point<dim> &)> f;
+
+  // Neumann boundary datum.
+  std::function<double(const Point<dim> &)> h;
 
   // Triangulation.
   Triangulation<dim> mesh;
@@ -100,7 +111,8 @@ protected:
   //
   // We use a unique_ptr here so that we can choose the type and order of the
   // quadrature formula at runtime (the order is a constructor parameter).
-  std::unique_ptr<Quadrature<dim>> quadrature;
+  std::unique_ptr<Quadrature<dim>>     quadrature;
+  std::unique_ptr<Quadrature<dim - 1>> quadrature_boundary;
 
   // DoF handler.
   DoFHandler<dim> dof_handler;
