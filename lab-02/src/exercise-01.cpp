@@ -7,9 +7,9 @@ int
 main(int /*argc*/, char * /*argv*/[])
 {
   constexpr unsigned int dim = Poisson2D::dim;
+  const unsigned int     r   = 1;
 
-  const std::string  mesh_file_name = "../mesh/mesh-square-5.msh";
-  const unsigned int r              = 1;
+  const std::string mesh_file_name = "../mesh/mesh-square-5.msh";
 
   const auto mu = [](const Point<dim> & /*p*/) { return 1.0; };
   const auto f  = [](const Point<dim>  &/*p*/) { return -5.0; };
